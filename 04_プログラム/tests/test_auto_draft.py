@@ -1,5 +1,6 @@
 import email
 import email.policy
+import shutil
 import sys
 import tempfile
 import unittest
@@ -7,7 +8,7 @@ from email.message import EmailMessage
 from email.utils import formatdate
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # 04_プログラム
 import auto_draft as ad  # noqa: E402
 
 KANRI = "担当 <tantou@kanri.example.jp>"
@@ -182,17 +183,58 @@ class HelperTests(unittest.TestCase):
         self.assertFalse(r.matches("x", "再見積依頼"))
 
     def test_example_config_loads(self):
-        root = Path(__file__).resolve().parents[1]
-        text = (root / "config.example.toml").read_text(encoding="utf-8").replace('password = ""', 'password = "x"', 1)
+        """リポジトリの見本どおりのフォルダ構成で設定が読めること."""
+        repo = Path(__file__).resolve().parents[2]
         with tempfile.TemporaryDirectory() as tmp:
-            p = Path(tmp) / "config.toml"
-            p.write_text(text, encoding="utf-8")
-            cfg = ad.load_config(p)
+            tmp = Path(tmp)
+            prog = tmp / "04_プログラム"
+            prog.mkdir()
+            shutil.copytree(repo / "02_返信テンプレート", tmp / "02_返信テンプレート")
+            secrets = tmp / "secrets.toml"
+            secrets.write_text('[Yahoo]\npassword = "pw"\n', encoding="utf-8")
+            text = (repo / "04_プログラム" / "config.example.toml").read_text(encoding="utf-8")
+            text = text.replace('"~/auto_draft_secrets.toml"', '"../secrets.toml"')
+            (prog / "config.toml").write_text(text, encoding="utf-8")
+            cfg = ad.load_config(prog / "config.toml")
+            self.assertEqual(cfg.state_file, (tmp / "05_記録" / "processed.json").resolve())
         self.assertEqual([a.name for a in cfg.accounts], ["Yahoo"])  # Gmail は enabled = false
+        self.assertEqual(cfg.accounts[0].password, "pw")
         self.assertEqual([r.name for r in cfg.rules], ["見積", "入退去"])
         self.assertTrue(cfg.rules[0].template.startswith("いつもお世話になります。坂本です。"))
+        self.assertIn("見積書を確認し、承知しました。", cfg.rules[0].template)
         self.assertTrue(cfg.rules[1].template.endswith("引き続き宜しくお願いいたします！"))
 
+    def test_missing_password_message(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "config.toml"
+            p.write_text(
+                '[settings]\nsecrets_file = "none.toml"\n'
+                '[[accounts]]\nname = "Yahoo"\nhost = "h"\nuser = "u"\n'
+                '[[rules]]\nname = "r"\ntemplate = "t"\n',
+                encoding="utf-8",
+            )
+            with self.assertRaises(SystemExit) as cm:
+                ad.load_config(p)
+        self.assertIn("[Yahoo]", str(cm.exception))
+
+    def test_template_file_with_bom(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "t.txt").write_bytes("\ufeff承知しました。\r\n".encode("utf-8"))
+            p = Path(tmp) / "config.toml"
+            p.write_text(
+                '[[accounts]]\nname = "Y"\nhost = "h"\nuser = "u"\npassword = "x"\n'
+                '[[rules]]\nname = "r"\ntemplate_file = "t.txt"\n',
+                encoding="utf-8",
+            )
+            cfg = ad.load_config(p)
+        self.assertEqual(cfg.rules[0].template.strip(), "承知しました。")
+
+    def test_state_creates_record_folder(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            st = ad.State(Path(tmp) / "05_記録" / "processed.json")
+            st.add("Yahoo", "<id>", "2026-11-21 draft")
+            st.save()
+            self.assertTrue((Path(tmp) / "05_記録" / "processed.json").exists())
 
 if __name__ == "__main__":
     unittest.main()

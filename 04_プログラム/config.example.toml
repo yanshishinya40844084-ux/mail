@@ -2,7 +2,12 @@
 # 返信下書き自動作成ツールの設定ファイル
 #
 # このファイルを「config.toml」という名前でコピーしてから編集してください。
-# config.toml にはパスワードを書くため、Git には保存されません（.gitignore 済み）。
+# ※ このファイルにはパスワードを書きません。パスワードは PC のユーザーフォルダの
+#    「auto_draft_secrets.toml」に書きます（README.md の手順2）。
+#    そのため、このファイルは Dropbox に置いて AI社員と共有しても安全です。
+#
+# ファイルの場所（../02_返信テンプレート など）は、このファイルがある
+# フォルダから見た位置です。
 # =====================================================================
 
 [settings]
@@ -11,11 +16,14 @@ lookback_days = 7
 # 返信の下に元のメールを「> 」付きで引用するか（true / false）
 quote_original = true
 # 下書き作成済みのメールを記録するファイル
-state_file = "processed.json"
+state_file = "../05_記録/processed.json"
+# パスワードファイルの場所（~ は PC のユーザーフォルダ。Dropbox の外に置くこと）
+secrets_file = "~/auto_draft_secrets.toml"
 
 
 # ---------------------------------------------------------------------
 # メールアカウント（使わないものは enabled = false に）
+# name は auto_draft_secrets.toml の [ ] の中の名前と同じにします。
 # ---------------------------------------------------------------------
 
 [[accounts]]
@@ -24,51 +32,39 @@ enabled = true
 host = "imap.mail.yahoo.co.jp"
 port = 993
 user = "your-id@yahoo.co.jp"          # ← ご自身のアドレス
-password = ""                         # ← Yahoo! JAPAN ID のパスワード
-# password_env = "YAHOO_MAIL_PASSWORD"  # 環境変数で渡す場合はこちら
 from_name = "坂本"                    # 差出人として表示される名前
 # drafts_folder = "Draft"             # 空なら自動で探します
-# rules = ["見積", "入退去"]           # このアカウントで使うルール（省略するとすべて）
 
 [[accounts]]
 name = "Gmail"
-enabled = false
+enabled = false                       # Gmail に移したら true に
 host = "imap.gmail.com"
 port = 993
 user = "your-name@gmail.com"
-password = ""                         # ← Google の「アプリ パスワード」（16桁）
 from_name = "坂本"
 
 
 # ---------------------------------------------------------------------
-# ルール（上から順に判定し、最初に一致したルールの定型文を使います）
+# ルール（上から順に判定し、最初に一致したルールの返信文を使います）
 #
 #   from_contains    : 送信者に含まれる文字（管理会社のアドレスやドメイン）
-#                      ※ 必ず設定してください。広告メールに反応しないようにするためです。
+#                      ※ 必ず設定してください。01_業務マニュアル/管理会社一覧.md と同じものを。
 #   subject_contains : 件名にどれか1つでも含まれていれば一致
-#   subject_excludes : 件名にこれが含まれていたら対象外
-#   template         : 返信の本文
+#   subject_excludes : 件名にこれが含まれていたら対象外（ご自身で返信する分として残る）
+#   template_file    : 返信文のファイル
+#
+# 【第1段階の注意】見積は金額に関係なく下書きが作られます。
+#   送信前に、見積書の金額が5万円以下か必ず確認してください（返信ルール.md の A）。
 # ---------------------------------------------------------------------
 
 [[rules]]
 name = "見積"
 from_contains = ["@kanri-company.example.jp"]   # ← 管理会社のメールアドレス（複数可）
 subject_contains = ["見積"]
-template = """
-いつもお世話になります。坂本です。
-見積書を確認し、承知しました。
-進めて頂きますようお願いします。
-いつもありがとうございます！
-引き続きよろしくお願いいたします。
-"""
+template_file = "../02_返信テンプレート/見積承知.txt"
 
 [[rules]]
 name = "入退去"
 from_contains = ["@kanri-company.example.jp"]   # ← 管理会社のメールアドレス（複数可）
 subject_contains = ["入居", "退去", "解約", "新規契約", "入退去"]
-template = """
-いつもお世話になります。坂本です。
-承知しました。
-いつもありがとうございます！
-引き続き宜しくお願いいたします！
-"""
+template_file = "../02_返信テンプレート/入退去承知.txt"

@@ -4,3 +4,4 @@ processed.json
 processed.tmp
 __pycache__/
 *.log
+auto_draft_secrets.toml

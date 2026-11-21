@@ -92,9 +92,24 @@ def load_config(path: Path) -> Config:
         raw = tomllib.load(fp)
 
     settings = raw.get("settings", {})
+    base = path.resolve().parent
+
+    def resolve(p: str) -> Path:
+        q = Path(p).expanduser()
+        return (q if q.is_absolute() else base / q).resolve()
+
     rules = []
     for r in raw.get("rules", []):
-        template = r["template"].strip("\n")
+        if r.get("template_file"):
+            tfile = resolve(r["template_file"])
+            if not tfile.exists():
+                raise SystemExit(f"設定エラー: ルール「{r['name']}」の返信文ファイルがありません: {tfile}")
+            # utf-8-sig: Windows のメモ帳で保存した BOM 付きファイルにも対応
+            template = tfile.read_text(encoding="utf-8-sig").strip("\n")
+        elif r.get("template"):
+            template = r["template"].strip("\n")
+        else:
+            raise SystemExit(f"設定エラー: ルール「{r['name']}」に template か template_file を書いてください。")
         rules.append(
             Rule(
                 name=r["name"],
@@ -107,17 +122,27 @@ def load_config(path: Path) -> Config:
     if not rules:
         raise SystemExit("設定エラー: [[rules]] が1つもありません。")
 
+    secrets_path = resolve(settings.get("secrets_file", "~/auto_draft_secrets.toml"))
+    secrets: dict = {}
+    if secrets_path.exists():
+        with open(secrets_path, "rb") as fp:
+            secrets = tomllib.load(fp)
+
     accounts = []
     for a in raw.get("accounts", []):
         if a.get("enabled", True) is False:
             continue
+        # パスワードの探し方: config の password → 環境変数 → パスワードファイル
         password = a.get("password", "")
-        if a.get("password_env"):
-            password = os.environ.get(a["password_env"], password)
+        if not password and a.get("password_env"):
+            password = os.environ.get(a["password_env"], "")
+        if not password:
+            password = secrets.get(a["name"], {}).get("password", "")
         if not password:
             raise SystemExit(
-                f"設定エラー: アカウント「{a['name']}」のパスワードがありません。"
-                " password か password_env を設定してください。"
+                f"設定エラー: アカウント「{a['name']}」のパスワードがありません。\n"
+                f"パスワードファイル {secrets_path} に次のように書いてください:\n"
+                f"[{a['name']}]\npassword = \"ここにパスワード\""
             )
         accounts.append(
             Account(
@@ -135,9 +160,7 @@ def load_config(path: Path) -> Config:
     if not accounts:
         raise SystemExit("設定エラー: 有効な [[accounts]] が1つもありません。")
 
-    state = Path(settings.get("state_file", "processed.json"))
-    if not state.is_absolute():
-        state = path.resolve().parent / state
+    state = resolve(settings.get("state_file", "processed.json"))
 
     return Config(
         accounts=accounts,
@@ -175,6 +198,7 @@ class State:
                 del acc[k]
 
     def save(self) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.path.with_suffix(".tmp")
         tmp.write_text(json.dumps(self.data, ensure_ascii=False, indent=1), encoding="utf-8")
         tmp.replace(self.path)
