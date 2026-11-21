@@ -1,0 +1,6 @@
+# パスワードを含む設定と処理記録は保存しない
+config.toml
+processed.json
+processed.tmp
+__pycache__/
+*.log
