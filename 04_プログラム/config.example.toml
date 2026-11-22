@@ -60,7 +60,9 @@ from_name = "坂本"
 [[rules]]
 name = "見積"
 from_contains = ["@kanri-company.example.jp"]   # ← 管理会社のメールアドレス（複数可）
-subject_contains = ["見積"]
+subject_contains = ["見積", "修繕"]
+# 修繕の完了報告には「見積書を確認し、承知しました」と返さないよう対象外
+subject_excludes = ["完了"]
 template_file = "../02_返信テンプレート/見積承知.txt"
 
 [[rules]]
